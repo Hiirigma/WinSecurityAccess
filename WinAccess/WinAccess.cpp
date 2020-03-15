@@ -10,8 +10,10 @@
 //		View Registеred ::
 // V - Users	
 // V - Groups
-// V - SID 
-// - Privilleges
+// V - SID g
+// V - SID u
+// V - Privilleges
+
 //		Must change ::
 // - Users
 // - Groups
@@ -19,122 +21,14 @@
 
 #include "LibHeader.h"
 
-
-//int getPrivil(LPWSTR username, HMODULE advModule, PSID pSID) {
-//	NTSTATUS Status = 0;
-//	LSA_HANDLE hPolicy = NULL;
-//	LSA_OBJECT_ATTRIBUTES ObjAttr = { 0 };
-//	PLSA_UNICODE_STRING pPrivs = NULL; // инициализация опять же
-//	ULONG cPrivs = 0;
-//	DWORD cchDisplayName = 0;
-//	CHAR szPrivilegeName[256];
-//	DWORD dwLanguageId = 0;
-//	if (advModule != NULL)
-//	{
-//		//printf("Privilleges :: ");
-//		//
-//		//PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advModule, "LsaOpenPolicy");
-//
-//		//ObjAttr.Length = sizeof(ObjAttr);
-//		//Status = _LsaOpenPolicy(NULL,
-//		//	&ObjAttr,
-//		//	(POLICY_TRUST_ADMIN | POLICY_VIEW_LOCAL_INFORMATION | POLICY_LOOKUP_NAMES | POLICY_CREATE_ACCOUNT),
-//		//	&hPolicy);
-//
-//		//if (_LsaEnumerateAccountRights != NULL)
-//		//{
-//
-//		//	NTSTATUS result = _LsaEnumerateAccountRights(hPolicy, pSID, &pPrivs, &cPrivs);
-//
-//		//	if (cPrivs == 0)
-//		//		printf("None;");
-//		//	else {
-//		//		for (int i = 0; i < cPrivs; i++)
-//		//			printf("%S; ", pPrivs[i].Buffer);
-//		//	}
-//
-//		//	printf("\n");
-//		//	if (result != FALSE)
-//		//	{
-//		//		
-//		//		// API Call Successful
-//		//	}
-//		//}
-//
-//		PROC_LookupPrivilegeDisplayNameW _LookupPrivilegeDisplayNameW = (PROC_LookupPrivilegeDisplayNameW)GetProcAddress(advModule, "LookupPrivilegeDisplayNameW");
-//		PROC_GetNamedSecurityInfoW _GetNamedSecurityInfoW = (PROC_GetNamedSecurityInfoW)GetProcAddress(advModule, "GetNamedSecurityInfoW");
-//
-//		/* Checks for Privilege and returns True or False. */
-//		LUID luid;
-//		PRIVILEGE_SET privs;
-//		HANDLE hProcess;
-//		HANDLE hToken;
-//		hProcess = GetCurrentProcess();
-//		if (!OpenProcessToken(hProcess, TOKEN_QUERY, &hToken)) return FALSE;
-//		if (!LookupPrivilegeValue(NULL, Privilege, &luid)) return FALSE;
-//		privs.PrivilegeCount = 1;
-//		privs.Control = PRIVILEGE_SET_ALL_NECESSARY;
-//		privs.Privilege[0].Luid = luid;
-//		privs.Privilege[0].Attributes = SE_PRIVILEGE_ENABLED;
-//		BOOL bResult;
-//		PrivilegeCheck(hToken, &privs, &bResult);
-//		return bResult;
-//
-//
-//
-//
-//
-//		//if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-//		//	return 1;
-//		//}
-//
-//		//GetTokenInformation(hToken, TokenPrivileges, NULL, 0, &dwLength);
-//
-//		//pTokenPrivileges = (PTOKEN_PRIVILEGES)LocalAlloc(LPTR, dwLength);
-//		//if (pTokenPrivileges == NULL) {
-//		//	CloseHandle(hToken);
-//		//	return 1;
-//		//}
-//
-//		//GetTokenInformation(hToken, TokenPrivileges, pTokenPrivileges, dwLength, &dwLength);
-//
-//
-//		//for (i = 0; i < pTokenPrivileges->PrivilegeCount; i++) {
-//
-//		//	dwLength = sizeof(szPrivilegeName) / sizeof(szPrivilegeName[0]);
-//
-//		//	LookupPrivilegeNameA(NULL,
-//		//		&pTokenPrivileges->Privileges[i].Luid,
-//		//		szPrivilegeName,
-//		//		&dwLength);
-//
-//		//	dwLength = sizeof(szDisplayName) / sizeof(szPrivilegeName[0]);
-//
-//		//	LookupPrivilegeDisplayNameA(NULL,
-//		//		szPrivilegeName,
-//		//		szDisplayName,
-//		//		&dwLength,
-//		//		&dwLanguageId);
-//
-//		//	puts("----------------------------------------------------------------------");
-//		//	printf("PrivilegeName: %s\n", szPrivilegeName);
-//		//	printf("DisplayName: %s\n", szDisplayName);
-//		//	printf("Enable: %s\n\n", pTokenPrivileges->Privileges[i].Attributes & SE_PRIVILEGE_ENABLED ? "True" : "False");
-//		//}
-//
-//		//CloseHandle(hToken);
-//		//LocalFree(pTokenPrivileges);
-//
-//	
-//	
-//	}
-//}
-
-
 int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle)
 {
 	PLSA_UNICODE_STRING rights;
 	ULONG rights_count;
+	LSA_ENUMERATION_INFORMATION *buf;
+	ULONG count = 0;
+	PROC_LsaEnumerateAccountsWithUserRight _LsaEnumerateAccountsWithUserRight = (PROC_LsaEnumerateAccountsWithUserRight)GetProcAddress(advHandle, "LsaEnumerateAccountsWithUserRight");
+	_LsaEnumerateAccountsWithUserRight(lsahPolicyHandle,NULL, (void**)&buf,&count);
 	if (advHandle != NULL)
 	{
 		PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
@@ -157,49 +51,6 @@ int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandl
 		return -1;
 	}
 
-	//PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
-
-	//rights = (PLSA_UNICODE_STRING)0xdeadbeaf;
-	//rights_count = 0xcafecafe;
-
-	//NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &rights, &rights_count);
-	//printf("Code from lsaenum :: 0x%x\n", nStatus);
-
-	//printf("Privilleges :: ");
-	//if (rights_count != 0) {
-	//	printf("\n");
-	//	for (ULONG i = 0; i < rights_count; i++) {
-	//		PWSTR pBuf = new WCHAR[rights[i].MaximumLength];
-	//		wcsncpy(pBuf, rights[i].Buffer, rights[i].Length);
-	//		printf("%d :: %S\n", i + 1, pBuf);
-	//		delete[] pBuf;
-	//	}
-	//}
-	//else
-	//	printf("None\n");
-
-	//printf("\n");
-	//HANDLE Token = NULL;
-	//HMODULE hModule = LoadLibrary(("WtsApi32.dll"));
-	//if (hModule != NULL)
-	//{
-	//	PROC_WTSQueryUserToken _WTSQueryUserToken = (PROC_WTSQueryUserToken)GetProcAddress(hModule, "WTSQueryUserToken");
-	//	if (_WTSQueryUserToken != NULL)
-	//	{
-	//		// TODO: Set Parameter Values
-	//		BOOL result = _WTSQueryUserToken(
-	//			(ULONG)AccountSid,
-	//			&Token
-	//		);
-
-	//		if (result != FALSE)
-	//		{
-	//			printf("Reruend res :: 0x%x\n", Token);
-	//		}
-	//	}
-	//	FreeLibrary(hModule);
-	//}
-	//return 0;
 }
 
 
@@ -236,12 +87,6 @@ PSID getSid(LPWSTR username, LSA_HANDLE lsahPolicyHandle, HMODULE advHandle, HMO
 	ret_val = _LookupAccountNameW(NULL, (LPCSTR)username, psid, &size, (LPTSTR)domain, &dom_size, &peUse);
 	if (!ret_val) return PSID(-1);
 
-	//printf("SID :: %s\n", sid_str);
-
-	//_HeapFree(_GetProcessHeap(),
-	//	0,
-	//	psid);
-
 	_HeapFree(_GetProcessHeap(),
 		0,
 		domain);
@@ -250,80 +95,45 @@ PSID getSid(LPWSTR username, LSA_HANDLE lsahPolicyHandle, HMODULE advHandle, HMO
 }
 
 
-//
-//PSID getspisjsid(PWSTR ObjName, LSA_HANDLE lsahPolicyHandle, HMODULE advHandle) {
-//	NET_API_STATUS nStatus;
-//	LSA_UNICODE_STRING name;
-//	PLSA_REFERENCED_DOMAIN_LIST ReferencedDomains;
-//	PLSA_TRANSLATED_SID2 SID;
-//	name.Buffer = ObjName;
-//	name.Length = wcslen(ObjName) * sizeof(WCHAR);
-//	name.MaximumLength = (wcslen(ObjName) + 1) * sizeof(WCHAR);
-//	PROC_LsaLookupNames2 _LsaLookupNames2 = (PROC_LsaLookupNames2)GetProcAddress(advHandle, "LsaLookupNames2");
-//	if (_LsaLookupNames2 != NULL)
-//	{
-//
-//		nStatus = _LsaLookupNames2(lsahPolicyHandle, 0x80000000, 1, &name, &ReferencedDomains, &SID);
-//		if (nStatus != NERR_Success)
-//		{
-//			// An error occurred. Display it as a win32 error code.
-//			wprintf(L"OpenPolicy returned %lu\n", nStatus);
-//			return NULL;
-//		}
-//	}
-//	else
-//	{
-//		printf("Error in get function pointer 0x%x", _LsaLookupNames2);
-//	}
-//
-//	PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
-//	PLSA_UNICODE_STRING rights;
-//	ULONG rights_count;
-//	rights = (PLSA_UNICODE_STRING)0xdeadbeaf;
-//	rights_count = 0xcafecafe;
-//
-//	nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, SID->Sid, &rights, &rights_count);
-//	printf("Code from lsaenum :: 0x%x\n", nStatus);
-//
-//	printf("Privilleges :: ");
-//	if (rights_count != 0) {
-//		printf("\n");
-//		for (ULONG i = 0; i < rights_count; i++) {
-//			PWSTR pBuf = new WCHAR[rights[i].MaximumLength];
-//			wcsncpy(pBuf, rights[i].Buffer, rights[i].Length);
-//			printf("%d :: %S\n", i + 1, pBuf);
-//			delete[] pBuf;
-//		}
-//	}
-//	else
-//		printf("None\n");
-//
-//	printf("\n");
-//
-//	return SID->Sid;
-//}
+DWORD outGroup(LPCWSTR user_name, HMODULE netHandle, LOCALGROUP_USERS_INFO_0 *puGroupBuf) {
+	NET_API_STATUS gruRes;
+	
+	PROC_NetUserGetLocalGroups _NetUserGetLocalGroups = (PROC_NetUserGetLocalGroups)GetProcAddress(netHandle, "NetUserGetLocalGroups");
+	DWORD guent;
+	DWORD guentread;
+	_LOCALGROUP_USERS_INFO_0 *locpuGroupBuf = new LOCALGROUP_USERS_INFO_0[50];
+	gruRes = _NetUserGetLocalGroups(
+		NULL,
+		user_name,
+		0,
+		LG_INCLUDE_INDIRECT,
+		(LPBYTE*)&locpuGroupBuf,
+		MAX_PREFERRED_LENGTH,
+		&guent,
+		&guentread
+	);
+	if (guentread != 0){
+		memcpy(puGroupBuf, locpuGroupBuf, 50 * sizeof(*locpuGroupBuf));
+		delete[] locpuGroupBuf;
+	}
+	return guentread;
+
+}
 
 
+void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
-void outUsers() {
-	// API Prototype for Netapi32.dll!NetUserEnum
-	HMODULE netHandle = LoadLibrary(("Netapi32.dll"));
-	HMODULE advHandle = LoadLibrary(("Advapi32.dll"));
-	HMODULE kernHandle = LoadLibrary(("Kernel32.dll"));
 
 	if (netHandle == NULL || advHandle == NULL || kernHandle == NULL) {
 		printf("Error in loading library\n");
 		exit(-1);
 	}
 
-	
-	DWORD entries;
-	DWORD guent;
+	DWORD entries;	
 	DWORD entRead;
-	DWORD guentread;
 	_USER_INFO_1 * pUserBuf = new USER_INFO_1[20];
 	_LOCALGROUP_INFO_0  * pGroupBuf = new _LOCALGROUP_INFO_0[255];
-	_LOCALGROUP_USERS_INFO_0 * puGroupBuf = new LOCALGROUP_USERS_INFO_0[50];
+	LOCALGROUP_USERS_INFO_0 puGroupBuf[50]; 
 	PSID Sid;
 	LPTSTR sid_str;
 	LSA_HANDLE lsahPolicyHandle = NULL;
@@ -331,14 +141,10 @@ void outUsers() {
 	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
 	NET_API_STATUS usrRes;
 	NET_API_STATUS grRes;
-	NET_API_STATUS gruRes;
 	NET_API_STATUS status;
 
-	if (netHandle != NULL)
-	{
 		PROC_NetUserEnum _NetUserEnum = (PROC_NetUserEnum)GetProcAddress(netHandle, "NetUserEnum");
 		PROC_NetLocalGroupEnum _NetLocalGroupEnum = (PROC_NetLocalGroupEnum)GetProcAddress(netHandle, "NetLocalGroupEnum");
-		PROC_NetUserGetLocalGroups _NetUserGetLocalGroups = (PROC_NetUserGetLocalGroups)GetProcAddress(netHandle, "NetUserGetLocalGroups");
 		PROC_ConvertSidToStringSidA _ConvertSidToStringSidA = (PROC_ConvertSidToStringSidA)GetProcAddress(advHandle, "ConvertSidToStringSidA");
 		PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
 
@@ -376,32 +182,26 @@ void outUsers() {
 				printf("\tList of users in system :: \n");
 				for (int i = 0;i!=entries; i++) {
 					if (pUserBuf[i].usri1_name == NULL) break;
-					gruRes = _NetUserGetLocalGroups(
-						NULL,
-						pUserBuf[i].usri1_name,
-						0,
-						LG_INCLUDE_INDIRECT,
-						(LPBYTE*)&puGroupBuf,
-						MAX_PREFERRED_LENGTH,
-						&guent,
-						&guentread
-					);
-
-
-
 					printf("User :: %S\n", pUserBuf[i].usri1_name);
-					if (guentread == 0)
+
+
+					usrRes = outGroup(pUserBuf[i].usri1_name, netHandle, puGroupBuf);
+					if (!usrRes) {
 						printf("None;");
-					for (int j = 0; j < guentread; j++) {
-						if (puGroupBuf[j].lgrui0_name != NULL) {
-							printf("%S; ", puGroupBuf[j].lgrui0_name);
-							Sid = getSid(puGroupBuf[j].lgrui0_name, lsahPolicyHandle, advHandle, kernHandle);
-							_ConvertSidToStringSidA(Sid, &sid_str);
-							printf(" || group SID :: %s\n", sid_str);
-							ShowObjRights(lsahPolicyHandle, Sid, advHandle);
-						}
 					}
-					//getPrivil(pUserBuf[i].usri1_name, advHandle);
+					else {
+						//printf("\n");
+						for (int j = 0; j < usrRes; j++) {
+							if (puGroupBuf[j].lgrui0_name != NULL) {
+								printf("%S; ", puGroupBuf[j].lgrui0_name);
+								Sid = getSid(puGroupBuf[j].lgrui0_name, lsahPolicyHandle, advHandle, kernHandle);
+								_ConvertSidToStringSidA(Sid, &sid_str);
+								printf(" || group SID :: %s\n", sid_str);
+								ShowObjRights(lsahPolicyHandle, Sid, advHandle);
+							}
+						}
+
+					}
 
 					Sid = getSid(pUserBuf[i].usri1_name, lsahPolicyHandle, advHandle,kernHandle);
 					_ConvertSidToStringSidA(Sid, &sid_str);
@@ -431,26 +231,91 @@ void outUsers() {
 					Sid = getSid(pGroupBuf[i].lgrpi0_name, lsahPolicyHandle, advHandle, kernHandle);
 					_ConvertSidToStringSidA(Sid, &sid_str);
 					printf("group SID :: %s\t", sid_str);
-					printf("%S\n", pGroupBuf[i].lgrpi0_name);
+					wprintf(L"%S\n", pGroupBuf[i].lgrpi0_name);
 				}
 			}
 
 		}
-
-	}
 	delete[] pUserBuf;
-	delete[] puGroupBuf;
 	delete[] pGroupBuf;
-	FreeLibrary(netHandle);
-	FreeLibrary(advHandle);
-	FreeLibrary(kernHandle);
+}
+
+void addUser(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
+	USER_INFO_1 ui;
+	DWORD dwLevel = 1;
+	DWORD dwError = 0;
+	wchar_t user_name[50];
+	wchar_t password[50];
+	NET_API_STATUS nStatus;
+
+	//
+	// Set up the USER_INFO_1 structure.
+	//  USER_PRIV_USER: name identifies a user, 
+	//    rather than an administrator or a guest.
+	//  UF_SCRIPT: required 
+	//
+	printf("Input username :: ");
+	scanf("%ls", &user_name);
+	ui.usri1_name = user_name;
+	printf("Input password :: ");
+	scanf("%ls", &password);
+	ui.usri1_password = password;
+	ui.usri1_priv = USER_PRIV_USER;
+	ui.usri1_home_dir = NULL;
+	ui.usri1_comment = NULL;
+	ui.usri1_flags = UF_SCRIPT;
+	ui.usri1_script_path = NULL;
+	//
+	// Call the NetUserAdd function, specifying level 1.
+	//
+	PROC_NetUserAdd _NetUserAdd = (PROC_NetUserAdd)GetProcAddress(netHandle, "NetUserAdd");
+	if (_NetUserAdd != NULL)
+	{
+		// TODO: Set Parameter Values
+		nStatus = _NetUserAdd(
+			user_name,
+			dwLevel,
+			(LPBYTE)&ui,
+			&dwError);
+	}
+		
+	//
+	// If the call succeeds, inform the user.
+	//
+	if (nStatus == NERR_Success)
+		fwprintf(stderr, L"User %s has been successfully added on %s\n",
+			password, user_name);
+	//
+	// Otherwise, print the system error.
+	//
+	else
+		fprintf(stderr, "A system error has occurred: 0x%x\n", nStatus);
 }
 
 
 int main(void)
 {
+	// API Prototype for Netapi32.dll!NetUserEnum
+	HMODULE netHandle = LoadLibrary(("Netapi32.dll"));
+	HMODULE advHandle = LoadLibrary(("Advapi32.dll"));
+	HMODULE kernHandle = LoadLibrary(("Kernel32.dll"));
+	char mode = 0;
+	printf("Select program mode (0 - out users/group/privilege); (1 - change u/g/p):: ");
+	scanf("%d",&mode);
+	switch (mode) {
+	case 0: outUsers(netHandle, advHandle, kernHandle); break;
+	case 1: addUser(netHandle, advHandle, kernHandle); break;
+	}
+
 	setlocale(LC_ALL, "Russian");
-	outUsers();
+
+
+	
+
+	FreeLibrary(netHandle);
+	FreeLibrary(advHandle);
+	FreeLibrary(kernHandle);
+
 	system("pause");
     return 0;
 }
