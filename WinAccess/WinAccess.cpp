@@ -15,9 +15,12 @@
 // V - Privilleges
 
 //		Must change ::
-// - Users
-// - Groups
-// - Privilleges
+// V - Users add
+// V - Users delete
+// V - Groups add
+// V - Groups delete
+// V - Privilleges add
+// V - Privilleges delete
 
 #include "LibHeader.h"
 
@@ -41,7 +44,7 @@ int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandl
 		printf(("There are %d rights"), rights_count);
 		for (int i = 0; i < rights_count; i++)
 		{
-			printf("\n* %S", rights->Buffer);
+			printf("\n%d - %S", i+1, rights->Buffer);
 			rights++;
 		}
 		printf(("\n"), rights_count);
@@ -53,9 +56,41 @@ int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandl
 
 }
 
+int getObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle, PWSTR *buffer)
+{
+	PLSA_UNICODE_STRING rights;
+	ULONG rights_count;
+	LSA_ENUMERATION_INFORMATION *buf;
+	ULONG count = 0;
+	PROC_LsaEnumerateAccountsWithUserRight _LsaEnumerateAccountsWithUserRight = (PROC_LsaEnumerateAccountsWithUserRight)GetProcAddress(advHandle, "LsaEnumerateAccountsWithUserRight");
+	_LsaEnumerateAccountsWithUserRight(lsahPolicyHandle, NULL, (void**)&buf, &count);
+	if (advHandle != NULL)
+	{
+		PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
+		NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &rights, &rights_count);
+		//printf("Code from lsaenum :: %d\n", nStatus);
+		if (!(nStatus == NERR_Success || nStatus == 0xC0000034)) {
+			fprintf(stderr, "A system error has occurred: %u\n", nStatus);
+			return -1;
+		}
+		printf(("There are %d rights"), rights_count);
+		for (int i = 0; i < rights_count; i++)
+		{
+			buffer[i] = rights->Buffer;
+			printf("\n%d - %S", i + 1, rights->Buffer);
+			rights++;
+		}
+		printf(("\n"), rights_count);
+	}
+	else {
+		printf("Error in privilege getting\n");
+		return -1;
+	}
+	return rights_count;
+}
 
 
-PSID getSid(LPWSTR username, LSA_HANDLE lsahPolicyHandle, HMODULE advHandle, HMODULE kernHandle) {
+PSID getSid(LPWSTR username, HMODULE advHandle, HMODULE kernHandle) {
 	LPWSTR domain = NULL;
 	DWORD size = 0, dom_size = 0;
 	SID_NAME_USE peUse;
@@ -147,7 +182,7 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 		PROC_NetLocalGroupEnum _NetLocalGroupEnum = (PROC_NetLocalGroupEnum)GetProcAddress(netHandle, "NetLocalGroupEnum");
 		PROC_ConvertSidToStringSidA _ConvertSidToStringSidA = (PROC_ConvertSidToStringSidA)GetProcAddress(advHandle, "ConvertSidToStringSidA");
 		PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
-
+		PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
 		usrRes = _LsaOpenPolicy(
 			NULL,
 			&ObjectAttributes,
@@ -187,14 +222,14 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
 					usrRes = outGroup(pUserBuf[i].usri1_name, netHandle, puGroupBuf);
 					if (!usrRes) {
-						printf("None;");
+						printf("None;\n");
 					}
 					else {
 						//printf("\n");
 						for (int j = 0; j < usrRes; j++) {
 							if (puGroupBuf[j].lgrui0_name != NULL) {
 								printf("%S; ", puGroupBuf[j].lgrui0_name);
-								Sid = getSid(puGroupBuf[j].lgrui0_name, lsahPolicyHandle, advHandle, kernHandle);
+								Sid = getSid(puGroupBuf[j].lgrui0_name, advHandle, kernHandle);
 								_ConvertSidToStringSidA(Sid, &sid_str);
 								printf(" || group SID :: %s\n", sid_str);
 								ShowObjRights(lsahPolicyHandle, Sid, advHandle);
@@ -203,12 +238,10 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
 					}
 
-					Sid = getSid(pUserBuf[i].usri1_name, lsahPolicyHandle, advHandle,kernHandle);
+					Sid = getSid(pUserBuf[i].usri1_name, advHandle,kernHandle);
 					_ConvertSidToStringSidA(Sid, &sid_str);
 					printf("user SID :: %s\n", sid_str);
 					ShowObjRights(lsahPolicyHandle,Sid,advHandle);
-					if (usrRes)
-						printf("Get sid error with code :: %d", usrRes);
 					printf("\n\n");
 				}
 			}
@@ -228,94 +261,596 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 				printf("\tList of groups in system :: \n");
 				for (int i = 0; i != entries; i++) {
 					if (pGroupBuf[i].lgrpi0_name == NULL) break;
-					Sid = getSid(pGroupBuf[i].lgrpi0_name, lsahPolicyHandle, advHandle, kernHandle);
+					Sid = getSid(pGroupBuf[i].lgrpi0_name, advHandle, kernHandle);
 					_ConvertSidToStringSidA(Sid, &sid_str);
 					printf("group SID :: %s\t", sid_str);
-					wprintf(L"%S\n", pGroupBuf[i].lgrpi0_name);
+					wprintf(L"%ls\n", pGroupBuf[i].lgrpi0_name);
 				}
 			}
 
 		}
 	delete[] pUserBuf;
 	delete[] pGroupBuf;
+	_LsaClose(lsahPolicyHandle);
 }
 
-void addUser(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
-	USER_INFO_1 ui;
-	DWORD dwLevel = 1;
-	DWORD dwError = 0;
-	wchar_t user_name[50];
-	wchar_t password[50];
-	NET_API_STATUS nStatus;
+int addUser(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
+	USER_INFO_1               user_info;
+	LOCALGROUP_INFO_1         localgroup_info;
+	LOCALGROUP_MEMBERS_INFO_3 localgroup_members;
+	CHAR						lpszPrimaryDC[50];
+	NET_API_STATUS            err = 0;
+	DWORD                     parm_err = 0;
+	LPWSTR lpszUser[50];
+	LPWSTR lpszPassword[50];
+	// First get the name of the primary domain controller. 
 
-	//
-	// Set up the USER_INFO_1 structure.
-	//  USER_PRIV_USER: name identifies a user, 
-	//    rather than an administrator or a guest.
-	//  UF_SCRIPT: required 
-	//
+	PROC_NetGetDCName _NetGetDCName = (PROC_NetGetDCName)GetProcAddress(netHandle, "NetGetDCName");
+	PROC_NetApiBufferFree _NetApiBufferFree = (PROC_NetApiBufferFree)GetProcAddress(netHandle, "NetApiBufferFree");
+
+	// Set up the USER_INFO_1 structure. 
 	printf("Input username :: ");
-	scanf("%ls", &user_name);
-	ui.usri1_name = user_name;
+	scanf("%ls", &lpszUser);
 	printf("Input password :: ");
-	scanf("%ls", &password);
-	ui.usri1_password = password;
-	ui.usri1_priv = USER_PRIV_USER;
-	ui.usri1_home_dir = NULL;
-	ui.usri1_comment = NULL;
-	ui.usri1_flags = UF_SCRIPT;
-	ui.usri1_script_path = NULL;
-	//
-	// Call the NetUserAdd function, specifying level 1.
-	//
+	scanf("%ls", &lpszPassword);
+
+	user_info.usri1_name = (LPWSTR)lpszUser;
+	user_info.usri1_password = (LPWSTR)lpszPassword;
+	user_info.usri1_priv = USER_PRIV_USER;
+	user_info.usri1_home_dir = (LPWSTR)"";
+	user_info.usri1_comment = (LPWSTR)("Sample User");
+	user_info.usri1_flags = UF_SCRIPT;
+	user_info.usri1_script_path = (LPWSTR)("");
 	PROC_NetUserAdd _NetUserAdd = (PROC_NetUserAdd)GetProcAddress(netHandle, "NetUserAdd");
 	if (_NetUserAdd != NULL)
 	{
-		// TODO: Set Parameter Values
-		nStatus = _NetUserAdd(
-			user_name,
-			dwLevel,
-			(LPBYTE)&ui,
-			&dwError);
+
+		err = _NetUserAdd(NULL,        // PDC name 
+			1,                    // level 
+			(LPBYTE)&user_info,  // input buffer 
+			&parm_err);          // parameter in error 
+
+		switch (err)
+		{
+		case 0:
+			printf("User successfully created.\n");
+			break;
+		case NERR_UserExists:
+			printf("User already exists.\n");
+			err = 0;
+			break;
+		case ERROR_INVALID_PARAMETER:
+			printf("Invalid parameter error adding user; parameter index = %d\n",
+				parm_err);
+			_NetApiBufferFree(lpszPrimaryDC);
+			return(err);
+		default:
+			printf("Error adding user: %d\n", err);
+			_NetApiBufferFree(lpszPrimaryDC);
+			return(err);
+		}
+
 	}
-		
-	//
-	// If the call succeeds, inform the user.
-	//
-	if (nStatus == NERR_Success)
-		fwprintf(stderr, L"User %s has been successfully added on %s\n",
-			password, user_name);
-	//
-	// Otherwise, print the system error.
-	//
-	else
-		fprintf(stderr, "A system error has occurred: 0x%x\n", nStatus);
 }
+
+
+int delUser(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
+	// Source Code
+	wchar_t lpszUser[50];
+	if (netHandle != NULL)
+	{
+		PROC_NetUserDel _NetUserDel = (PROC_NetUserDel)GetProcAddress(netHandle, "NetUserDel");
+		if (_NetUserDel != NULL)
+		{
+			printf("Input user name :: ");
+			scanf("%ls", &lpszUser);
+			// TODO: Set Parameter Values
+			NET_API_STATUS result = _NetUserDel(
+				NULL,
+				lpszUser
+			);
+
+			if (result == NERR_Success)
+			{
+				printf("User successfully deleted.\n");
+				return 0;
+				// API Call Successful
+			}
+			else {
+				printf("Function error with code %d.\n", result);
+				return 1;
+			}
+		}
+	}
+
+}
+
+
+int addGroup(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
+		DWORD	parm_err = 0;
+		DWORD dwLevel = 0;
+		wchar_t lpszGroup[50];
+		_LOCALGROUP_INFO_0 l_group;
+		PROC_NetLocalGroupAdd _NetLocalGroupAdd = (PROC_NetLocalGroupAdd)GetProcAddress(netHandle, "NetLocalGroupAdd");
+		if (_NetLocalGroupAdd != NULL)
+		{
+			printf("Input group name :: ");
+			scanf("%ls", &lpszGroup);
+			l_group.lgrpi0_name = lpszGroup;
+			// TODO: Set Parameter Values
+			NET_API_STATUS result = _NetLocalGroupAdd(
+				NULL,
+				dwLevel,
+				(LPBYTE)&l_group,
+				&parm_err
+			);
+
+			if (result == NERR_Success)
+			{
+				printf("Group added sucessfuly\n");
+			}
+			else
+			{
+				printf("Error in addign group :: %d\n", result);
+			}
+		}
+	return 0;
+}
+
+
+int delGroup(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
+	wchar_t lpszGroup[50];
+	PROC_NetLocalGroupDel _NetLocalGroupDel = (PROC_NetLocalGroupDel)GetProcAddress(netHandle, "NetLocalGroupDel");
+		if (_NetLocalGroupDel != NULL)
+		{
+			printf("Input group name :: ");
+			scanf("%ls", &lpszGroup);
+			// TODO: Set Parameter Values
+			NET_API_STATUS result = _NetLocalGroupDel(
+				NULL,
+				lpszGroup
+			);
+
+			if (result == NERR_Success)
+			{
+				printf("Success delete group\n");
+			}
+			else {
+				printf("Error while deleting group :: %d\n", result);
+
+			}
+		}
+
+	return 0;
+}
+
+
+void AddMembersInGroup(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+	PROC_NetLocalGroupAddMembers _NetLocalGroupAddMembers = (PROC_NetLocalGroupAddMembers)GetProcAddress(netHandle, "NetLocalGroupAddMembers");
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	NET_API_STATUS nStatus;
+	LOCALGROUP_MEMBERS_INFO_0 pBuf;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	wchar_t username[50] = { 0 };
+	wchar_t groupname[50] = { 0 };
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("Error while added user in group :: %d\n", nStatus);
+		return;
+	}
+	printf("Enter the user name:\n");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(username, advHandle, kernHandle);
+	if (AccountSid == NULL) {
+		printf("Error while delete user from group :: SID is NULL\n");
+		return;
+	}
+	pBuf.lgrmi0_sid = AccountSid;
+	printf("Enter the group name:\n");
+	wscanf(L"%s", groupname);
+	nStatus = _NetLocalGroupAddMembers(NULL,
+		groupname,
+		0,
+		(LPBYTE)&pBuf,
+		1);
+	if (nStatus == NERR_Success)
+		printf("Successfully added member\n");
+	else {
+		printf("Error while delete user from group :: %d\n", nStatus);
+		return;
+	}
+	_LsaClose(lsahPolicyHandle);
+}
+
+
+void DelMembersInGroup(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+	PROC_NetLocalGroupDelMembers _NetLocalGroupDelMembers = (PROC_NetLocalGroupDelMembers)GetProcAddress(netHandle, "NetLocalGroupDelMembers");
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	NET_API_STATUS nStatus;
+	LOCALGROUP_MEMBERS_INFO_0 pBuf;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	wchar_t username[50] = { 0 };
+	wchar_t groupname[50] = { 0 };
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	
+	printf("Enter username :: ");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(PWSTR("TestUser1"),advHandle,kernHandle);
+	if (AccountSid == NULL)
+		return;
+	pBuf.lgrmi0_sid = AccountSid;
+	
+	printf("Enter the user name :: ");
+	wscanf(L"%s", groupname);
+	nStatus = _NetLocalGroupDelMembers(NULL,
+		groupname,
+		0,
+		(LPBYTE)&pBuf,
+		1);
+	if (nStatus == NERR_Success)
+		printf("Successfully deleted member\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	_LsaClose(lsahPolicyHandle);
+}
+
+
+
+
+void AddLogonRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaAddAccountRights _LsaAddAccountRights = (PROC_LsaAddAccountRights)GetProcAddress(advHandle, "LsaAddAccountRights");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	NET_API_STATUS nStatus;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	LSA_UNICODE_STRING UserRights;
+	wchar_t username[50] = { 0 };
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	
+	printf("Enter the user name:\n");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(username, advHandle,kernHandle);
+	if (AccountSid == NULL) {
+		printf("Error while delete user from group :: SID is NULL\n");
+		return;
+	}
+
+	UserRights.Buffer = L"SeShutdownPrivilege";
+	UserRights.Length = strlen(SE_SHUTDOWN_NAME) * sizeof(wchar_t);
+	UserRights.MaximumLength = (strlen(SE_SHUTDOWN_NAME) + 1) * sizeof(wchar_t);
+
+	ULONG CountOfRights = 1;
+	nStatus = _LsaAddAccountRights(lsahPolicyHandle,
+		AccountSid,
+		&UserRights,
+		CountOfRights);
+	if (nStatus == NERR_Success)
+		printf("Successfully added shutdown right\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	_LsaClose(lsahPolicyHandle);
+}
+
+
+void DelLogonRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaRemoveAccountRights _LsaRemoveAccountRights = (PROC_LsaRemoveAccountRights)GetProcAddress(advHandle, "LsaRemoveAccountRights");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	NET_API_STATUS nStatus;
+	ULONG CountOfRights = 1;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	wchar_t username[50] = { 0 };
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	printf("Enter the user name:\n");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(username,advHandle,kernHandle);
+
+	if (AccountSid == NULL) {
+		printf("Error while delete user from group :: SID is NULL\n");
+		return;
+	}
+
+	LSA_UNICODE_STRING UserRights;
+	UserRights.Buffer = L"SeShutdownPrivilege";
+	UserRights.Length = strlen(SE_SHUTDOWN_NAME) * sizeof(wchar_t);
+	UserRights.MaximumLength = (strlen(SE_SHUTDOWN_NAME) + 1) * sizeof(wchar_t);
+
+	nStatus = _LsaRemoveAccountRights(lsahPolicyHandle,
+		AccountSid,
+		FALSE,
+		&UserRights,
+		CountOfRights);
+	if (nStatus == NERR_Success)
+		printf("Successfully deleted shutdown right\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	_LsaClose(lsahPolicyHandle);
+}
+
+
+
+
+void AddRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+	wchar_t privil[][50] = {
+		L"SeCreateTokenPrivilege",
+		L"SeAssignPrimaryTokenPrivilege",
+		L"SeLockMemoryPrivilege",
+		L"SeIncreaseQuotaPrivilege",
+		L"SeUnsolicitedInputPrivilege",
+		L"SeMachineAccountPrivilege",
+		L"SeTcbPrivilege",
+		L"SeSecurityPrivilege",
+		L"SeTakeOwnershipPrivilege",
+		L"SeLoadDriverPrivilege",
+		L"SeSystemProfilePrivilege",
+		L"SeSystemtimePrivilege",
+		L"SeProfileSingleProcessPrivilege",
+		L"SeIncreaseBasePriorityPrivilege",
+		L"SeCreatePagefilePrivilege",
+		L"SeCreatePermanentPrivilege",
+		L"SeBackupPrivilege",
+		L"SeRestorePrivilege",
+		L"SeShutdownPrivilege",
+		L"SeDebugPrivilege",
+		L"SeAuditPrivilege",
+		L"SeSystemEnvironmentPrivilege",
+		L"SeChangeNotifyPrivilege",
+		L"SeRemoteShutdownPrivilege",
+		L"SeUndockPrivilege",
+		L"SeSyncAgentPrivilege",
+		L"SeEnableDelegationPrivilege",
+		L"SeManageVolumePrivilege",
+		L"SeImpersonatePrivilege",
+		L"SeCreateGlobalPrivilege",
+		L"SeTrustedCredManAccessPrivilege",
+		L"SeRelabelPrivilege",
+		L"SeIncreaseWorkingSetPrivilege",
+		L"SeTimeZonePrivilege",
+		L"SeCreateSymbolicLinkPrivilege"
+	};
+
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaAddAccountRights _LsaAddAccountRights = (PROC_LsaAddAccountRights)GetProcAddress(advHandle, "LsaAddAccountRights");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	ULONG CountOfRights = 1;
+	NET_API_STATUS nStatus;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	LSA_UNICODE_STRING UserRights;
+	wchar_t username[50] = { 0 };
+	int mode = 0;
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	
+	printf("Enter the user name:\n");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(username, advHandle, kernHandle);
+	if (AccountSid == NULL) {
+		printf("Error while delete user from group :: SID is NULL\n");
+		return;
+	}
+
+	printf("Choose privilege to add :: \n");
+	for (int i = 0; i != 35; i++) printf("%d - %ls\n", i + 1, privil[i]);
+
+	do {
+		scanf("%d", &mode);
+		if (mode > 35)continue;
+		if (mode == -1)break;
+		UserRights.Buffer = privil[mode];
+		UserRights.Length = wcslen(privil[mode]) * sizeof(wchar_t);
+		UserRights.MaximumLength = (wcslen(privil[mode]) + 1) * sizeof(wchar_t);
+		nStatus = _LsaAddAccountRights(lsahPolicyHandle,
+			AccountSid,
+			&UserRights,
+			CountOfRights);
+		if (nStatus == NERR_Success)
+			printf("Successfully added shutdown right\n");
+		else {
+			printf("A system error has occurred: %d\n", nStatus);
+			return;
+		}
+
+	} while (mode);
+
+
+	_LsaClose(lsahPolicyHandle);
+}
+
+
+void DelRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
+{
+
+	PROC_LsaOpenPolicy _LsaOpenPolicy = (PROC_LsaOpenPolicy)GetProcAddress(advHandle, "LsaOpenPolicy");
+	PROC_LsaRemoveAccountRights _LsaRemoveAccountRights = (PROC_LsaRemoveAccountRights)GetProcAddress(advHandle, "LsaRemoveAccountRights");
+	PROC_LsaClose _LsaClose = (PROC_LsaClose)GetProcAddress(advHandle, "LsaClose");
+	NET_API_STATUS nStatus;
+	ULONG CountOfRights = 1;
+	LSA_HANDLE lsahPolicyHandle = NULL;
+	LSA_OBJECT_ATTRIBUTES ObjectAttributes;
+	LSA_UNICODE_STRING UserRights;
+	wchar_t username[50] = { 0 };
+	PWSTR buffer_privil[50];
+	LOCALGROUP_USERS_INFO_0 puGroupBuf[50];
+	int mode = 0, ret_mode = 0;
+	ZeroMemory(&ObjectAttributes, sizeof(ObjectAttributes));
+	nStatus = _LsaOpenPolicy(
+		NULL,
+		&ObjectAttributes,
+		POLICY_ALL_ACCESS,
+		&lsahPolicyHandle
+	);
+	if (nStatus == NERR_Success)
+		printf("Successfully obtain policy\n");
+	else {
+		printf("A system error has occurred: %d\n", nStatus);
+		return;
+	}
+	printf("Enter the user name:\n");
+	wscanf(L"%s", username);
+	PSID AccountSid = getSid(username, advHandle, kernHandle);
+
+	if (AccountSid == NULL) {
+		printf("Error while delete user from group :: SID is NULL\n");
+		return;
+	}
+
+
+	printf("Choose privilege to add :: \n");
+
+	do{
+		ret_mode = getObjRights(lsahPolicyHandle, AccountSid, advHandle, buffer_privil);
+		scanf("%d", &mode);
+		if (mode < 0 || mode > ret_mode) break;
+		UserRights.Buffer = buffer_privil[mode-1];
+		UserRights.Length = wcslen(buffer_privil[mode-1]) * sizeof(wchar_t);
+		UserRights.MaximumLength = (wcslen(buffer_privil[mode-1]) + 1) * sizeof(wchar_t);
+		nStatus = _LsaRemoveAccountRights(lsahPolicyHandle,
+			AccountSid,
+			FALSE,
+			&UserRights,
+			CountOfRights);
+		if (nStatus == NERR_Success) {
+			printf("Successfully deleted shutdown right\n");
+			memset(buffer_privil, 0, sizeof(buffer_privil));
+		}
+		else {
+			printf("A system error has occurred: %d\n", nStatus);
+			return;
+		}
+
+	} while (mode > 0);
+
+	_LsaClose(lsahPolicyHandle);
+}
+
 
 
 int main(void)
 {
+	setlocale(LC_ALL, "Russian");
 	// API Prototype for Netapi32.dll!NetUserEnum
 	HMODULE netHandle = LoadLibrary(("Netapi32.dll"));
 	HMODULE advHandle = LoadLibrary(("Advapi32.dll"));
 	HMODULE kernHandle = LoadLibrary(("Kernel32.dll"));
-	char mode = 0;
-	printf("Select program mode (0 - out users/group/privilege); (1 - change u/g/p):: ");
+	int mode = 0;
+AGN:
+	printf("Select program mode ::\n");
+	printf("0 - Show all info\n");
+	printf("1 - Add user\n");
+	printf("2 - Del user\n");
+	printf("3 - Add group\n");
+	printf("4 - Del group\n");
+	printf("5 - Add user to group\n");
+	printf("6 - Del user from group\n");
+	printf("7 - Adjust privillege to load system\n");
+	printf("8 - Delete privillege to load system\n");
+	printf("9 - Add privillege to user\n");
+	printf("10 - Delete privillege drom user\n");
+
 	scanf("%d",&mode);
 	switch (mode) {
-	case 0: outUsers(netHandle, advHandle, kernHandle); break;
-	case 1: addUser(netHandle, advHandle, kernHandle); break;
+		case 0: outUsers(netHandle, advHandle, kernHandle); break;
+		case 1: addUser(netHandle, advHandle, kernHandle); break;
+		case 2: delUser(netHandle, advHandle, kernHandle); break;
+		case 3: addGroup(netHandle, advHandle, kernHandle); break;
+		case 4: delGroup(netHandle, advHandle, kernHandle); break;
+		case 5: AddMembersInGroup(advHandle, kernHandle, netHandle); break;
+		case 6: DelMembersInGroup(advHandle, kernHandle, netHandle); break;
+		case 7: AddLogonRights(advHandle, kernHandle, netHandle); break;
+		case 8: DelLogonRights(advHandle, kernHandle, netHandle); break;
+		case 9: AddRights(advHandle, kernHandle, netHandle); break;
+		case 10: DelRights(advHandle, kernHandle, netHandle); break;
+
+
+	}
+	printf("Would you like to exit :: 0 or 1\n");
+	scanf("%d", &mode);
+	printf("\n");
+	if (mode == 1) {
+		FreeLibrary(netHandle);
+		FreeLibrary(advHandle);
+		FreeLibrary(kernHandle);
+		system("pause");
+		return 0;
+	}
+	else {
+		goto AGN;
 	}
 
-	setlocale(LC_ALL, "Russian");
-
-
-	
-
-	FreeLibrary(netHandle);
-	FreeLibrary(advHandle);
-	FreeLibrary(kernHandle);
-
-	system("pause");
-    return 0;
+	return 0;
 }

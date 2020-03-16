@@ -41,6 +41,8 @@
 #define UF_ACCOUNT_TYPE_MASK (UF_TEMP_DUPLICATE_ACCOUNT|UF_NORMAL_ACCOUNT|UF_INTERDOMAIN_TRUST_ACCOUNT|UF_WORKSTATION_TRUST_ACCOUNT|UF_SERVER_TRUST_ACCOUNT)
 #define UF_DONT_EXPIRE_PASSWD 65536
 #define UF_SETTABLE_BITS (UF_SCRIPT|UF_ACCOUNTDISABLE|UF_LOCK|UF_HOMEDIR_REQUIRED|UF_PASSWD_NOTREQD|UF_PASSWD_CANT_CHANGE|UF_ACCOUNT_TYPE_MASK|UF_DONT_EXPIRE_PASSWD)
+#define NERR_BASE 2100
+#define NERR_UserExists (NERR_BASE+124)
 
 typedef PVOID LSA_HANDLE, *PLSA_HANDLE;
 
@@ -93,6 +95,17 @@ typedef struct _GROUP_USERS_INFO_1 {
 	DWORD   grui1_attributes;
 } GROUP_USERS_INFO_1, *PGROUP_USERS_INFO_1, *LPGROUP_USERS_INFO_1;
 
+typedef struct _GROUP_INFO_1 {
+	LPWSTR grpi1_name;
+	LPWSTR grpi1_comment;
+} GROUP_INFO_1, *PGROUP_INFO_1, *LPGROUP_INFO_1;
+
+typedef struct _GROUP_INFO_2 {
+	LPWSTR grpi2_name;
+	LPWSTR grpi2_comment;
+	DWORD  grpi2_group_id;
+	DWORD  grpi2_attributes;
+} GROUP_INFO_2, *PGROUP_INFO_2;
 
 typedef struct _LOCALGROUP_USERS_INFO_0 {
 	LPWSTR lgrui0_name;
@@ -103,12 +116,23 @@ typedef struct _LOCALGROUP_INFO_0 {
 	LPWSTR   lgrpi0_name;
 }LOCALGROUP_INFO_0, *PLOCALGROUP_INFO_0, *LPLOCALGROUP_INFO_0;
 
+typedef struct _LOCALGROUP_INFO_1 {
+	LPWSTR lgrpi1_name;
+	LPWSTR lgrpi1_comment;
+} LOCALGROUP_INFO_1, *PLOCALGROUP_INFO_1, *LPLOCALGROUP_INFO_1;
+
+typedef struct _LOCALGROUP_MEMBERS_INFO_3 {
+	LPWSTR lgrmi3_domainandname;
+} LOCALGROUP_MEMBERS_INFO_3, *PLOCALGROUP_MEMBERS_INFO_3, *LPLOCALGROUP_MEMBERS_INFO_3;
 
 typedef struct _LSA_TRUST_INFORMATION {
 	LSA_UNICODE_STRING Name;
 	PSID               Sid;
 } LSA_TRUST_INFORMATION, *PLSA_TRUST_INFORMATION;
 
+typedef struct _LOCALGROUP_MEMBERS_INFO_0 {
+	PSID lgrmi0_sid;
+} LOCALGROUP_MEMBERS_INFO_0, *PLOCALGROUP_MEMBERS_INFO_0, *LPLOCALGROUP_MEMBERS_INFO_0;
 
 typedef struct _LSA_TRANSLATED_SID2 {
 	SID_NAME_USE Use;
@@ -277,3 +301,76 @@ typedef NET_API_STATUS(__stdcall *PROC_NetUserAdd)(
 	LPBYTE buf,
 	LPDWORD parm_err
 	);
+
+// API Prototype for Netapi32.dll!NetGetDCName
+typedef NET_API_STATUS(__stdcall *PROC_NetGetDCName)(
+	LPCWSTR servername,
+	LPCWSTR domainname,
+	LPBYTE* bufptr
+	);
+
+// API Prototype for Netapi32.dll!NetApiBufferFree
+typedef NET_API_STATUS(__stdcall *PROC_NetApiBufferFree)(
+	LPVOID Buffer
+	);
+
+// API Prototype for Netapi32.dll!NetUserDel
+typedef NET_API_STATUS(__stdcall *PROC_NetUserDel)(
+	LPCWSTR servername,
+	LPCWSTR username
+	);
+
+// API Prototype for Netapi32.dll!NetLocalGroupAdd
+typedef NET_API_STATUS(__stdcall *PROC_NetLocalGroupAdd)(
+	LPCWSTR servername,
+	DWORD level,
+	LPBYTE buf,
+	LPDWORD parm_err
+	);
+
+// API Prototype for Netapi32.dll!NetLocalGroupDel
+typedef NET_API_STATUS(__stdcall *PROC_NetLocalGroupDel)(
+	LPCWSTR servername,
+	LPCWSTR groupname
+	);
+
+// API Prototype for Netapi32.dll!NetLocalGroupAddMembers
+typedef NET_API_STATUS(__stdcall *PROC_NetLocalGroupAddMembers)(
+	LPCWSTR servername,
+	LPCWSTR groupname,
+	DWORD level,
+	LPBYTE buf,
+	DWORD totalentries
+	);
+
+// API Prototype for Advapi32.dll!LsaClose
+typedef NTSTATUS(__stdcall *PROC_LsaClose)(
+	LSA_HANDLE ObjectHandle
+	);
+
+// API Prototype for Netapi32.dll!NetLocalGroupDelMembers
+typedef NET_API_STATUS(__stdcall *PROC_NetLocalGroupDelMembers)(
+	LPCWSTR servername,
+	LPCWSTR groupname,
+	DWORD level,
+	LPBYTE buf,
+	DWORD totalentries
+	);
+
+// API Prototype for Advapi32.dll!LsaAddAccountRights
+typedef NTSTATUS(__stdcall *PROC_LsaAddAccountRights)(
+	LSA_HANDLE PolicyHandle,
+	PSID AccountSid,
+	PLSA_UNICODE_STRING UserRights,
+	ULONG CountOfRights
+	);
+
+// API Prototype for Advapi32.dll!LsaRemoveAccountRights
+typedef NTSTATUS(__stdcall *PROC_LsaRemoveAccountRights)(
+	LSA_HANDLE PolicyHandle,
+	PSID AccountSid,
+	BOOLEAN AllRights,
+	PLSA_UNICODE_STRING UserRights,
+	ULONG CountOfRights
+	);
+
