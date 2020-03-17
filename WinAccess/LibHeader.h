@@ -1,12 +1,11 @@
 #include <stdio.h>
 #include <Windows.h>
 #include <locale.h>
-// For outUsers and netusersenum
+
 #define NET_API_STATUS DWORD
 #define NERR_Success 0
 #define LG_INCLUDE_INDIRECT 1
 #define MAX_PREFERRED_LENGTH -1
-// API Prototype for Netapi32.dll!NetUserEnum
 
 #define POLICY_VIEW_LOCAL_INFORMATION 0x00000001
 #define POLICY_VIEW_AUDIT_INFORMATION 0x00000002
