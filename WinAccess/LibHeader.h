@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <Windows.h>
 #include <locale.h>
+#include <vector>
 
 #define NET_API_STATUS DWORD
 #define NERR_Success 0
@@ -373,3 +374,4 @@ typedef NTSTATUS(__stdcall *PROC_LsaRemoveAccountRights)(
 	ULONG CountOfRights
 	);
 
+using namespace std;

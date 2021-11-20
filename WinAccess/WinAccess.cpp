@@ -1,4 +1,4 @@
-// BSIT laboratory work - 1
+// MBKS laboratory work - 6
 
 //		The criteria ::
 // - Dynamic loaded library (Windows functions) 
@@ -14,7 +14,10 @@
 // V - SID u
 // V - Privilleges
 
-//		Must change ::
+// - - Owners
+// - - rigths for all created files and dirs
+
+//		Need change ::
 // V - Users add
 // V - Users delete
 // V - Groups add
@@ -26,28 +29,27 @@
 
 int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle)
 {
-	PLSA_UNICODE_STRING rights;
-	ULONG rights_count;
-	LSA_ENUMERATION_INFORMATION *buf;
-	ULONG count = 0; 
+	PLSA_UNICODE_STRING lsau16sRights;
+	ULONG ulRightsCount = 0;
+	LSA_ENUMERATION_INFORMATION *lsaeInformation;
 	PROC_LsaEnumerateAccountsWithUserRight _LsaEnumerateAccountsWithUserRight = (PROC_LsaEnumerateAccountsWithUserRight)GetProcAddress(advHandle, "LsaEnumerateAccountsWithUserRight");
-	_LsaEnumerateAccountsWithUserRight(lsahPolicyHandle,NULL, (void**)&buf,&count);
+	_LsaEnumerateAccountsWithUserRight(lsahPolicyHandle,NULL, (void**)&lsaeInformation,&ulRightsCount);
+	ulRightsCount = 0;
 	if (advHandle != NULL)
 	{
 		PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
-		NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &rights, &rights_count);
-		//printf("Code from lsaenum :: %d\n", nStatus);
+		NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &lsau16sRights, &ulRightsCount);
 		if (!(nStatus == NERR_Success || nStatus == 0xC0000034)) {
 			printf("A system error has occurred: %u\n", nStatus);
 			return -1;
 		}
-		printf(("There are %d rights"), rights_count);
-		for (int i = 0; i < rights_count; i++)
+		printf(("There are %u rights\n"), ulRightsCount);
+		for (int i = 0; i < ulRightsCount; i++)
 		{
-			printf("\n%d - %S", i+1, rights->Buffer);
-			rights++;
+			printf("%d - %S\n", i+1, lsau16sRights->Buffer);
+			lsau16sRights++;
 		}
-		printf(("\n"), rights_count);
+
 	}
 	else {
 		printf("Error in privilege getting\n");
@@ -58,7 +60,7 @@ int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandl
 
 int getObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle, PWSTR *buffer)
 {
-	PLSA_UNICODE_STRING rights;
+	PLSA_UNICODE_STRING lsau16sRights;
 	ULONG rights_count;
 	LSA_ENUMERATION_INFORMATION *buf;
 	ULONG count = 0;
@@ -67,7 +69,7 @@ int getObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle
 	if (advHandle != NULL)
 	{
 		PROC_LsaEnumerateAccountRights _LsaEnumerateAccountRights = (PROC_LsaEnumerateAccountRights)GetProcAddress(advHandle, "LsaEnumerateAccountRights");
-		NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &rights, &rights_count);
+		NET_API_STATUS nStatus = _LsaEnumerateAccountRights(lsahPolicyHandle, AccountSid, &lsau16sRights, &rights_count);
 		//printf("Code from lsaenum :: %d\n", nStatus);
 		if (!(nStatus == NERR_Success || nStatus == 0xC0000034)) {
 			printf("A system error has occurred: %u\n", nStatus);
@@ -76,9 +78,9 @@ int getObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle
 		printf(("There are %d rights"), rights_count);
 		for (int i = 0; i < rights_count; i++)
 		{
-			buffer[i] = rights->Buffer;
-			printf("\n%d - %S", i + 1, rights->Buffer);
-			rights++;
+			buffer[i] = lsau16sRights->Buffer;
+			printf("\n%d - %S", i + 1, lsau16sRights->Buffer);
+			lsau16sRights++;
 		}
 		printf(("\n"), rights_count);
 	}
@@ -130,29 +132,25 @@ PSID getSid(LPWSTR username, HMODULE advHandle, HMODULE kernHandle) {
 }
 
 
-DWORD outGroup(LPCWSTR user_name, HMODULE netHandle, LOCALGROUP_USERS_INFO_0 *puGroupBuf) {
+DWORD outGroup(LPCWSTR user_name, HMODULE netHandle, std::vector<_LOCALGROUP_USERS_INFO_0*> &locpuGroupBuf) {
 	NET_API_STATUS gruRes;
 	
 	PROC_NetUserGetLocalGroups _NetUserGetLocalGroups = (PROC_NetUserGetLocalGroups)GetProcAddress(netHandle, "NetUserGetLocalGroups");
 	DWORD guent;
 	DWORD guentread;
-	_LOCALGROUP_USERS_INFO_0 *locpuGroupBuf = new LOCALGROUP_USERS_INFO_0[50];
+	//_LOCALGROUP_USERS_INFO_0 *locpuGroupBuf = new LOCALGROUP_USERS_INFO_0[50];
+	locpuGroupBuf.resize(50);
 	gruRes = _NetUserGetLocalGroups(
 		NULL,
 		user_name,
 		0,
 		LG_INCLUDE_INDIRECT,
-		(LPBYTE*)&locpuGroupBuf,
+		(LPBYTE*)&locpuGroupBuf[0],
 		MAX_PREFERRED_LENGTH,
 		&guent,
 		&guentread
 	);
-	if (guentread != 0){
-		memcpy(puGroupBuf, locpuGroupBuf, 50 * sizeof(*locpuGroupBuf));
-		delete[] locpuGroupBuf;
-	}
 	return guentread;
-
 }
 
 
@@ -166,9 +164,13 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
 	DWORD entries;	
 	DWORD entRead;
-	_USER_INFO_1 * pUserBuf = new USER_INFO_1[20];
-	_LOCALGROUP_INFO_0  * pGroupBuf = new _LOCALGROUP_INFO_0[255];
-	LOCALGROUP_USERS_INFO_0 puGroupBuf[50]; 
+	LPUSER_INFO_1 pUserBuf;
+	LPUSER_INFO_1 pTmpUserBuf;
+
+	LPLOCALGROUP_INFO_0 pGroupBuf;
+	LPLOCALGROUP_INFO_0 pTmpGroupBuf;
+
+	std::vector<_LOCALGROUP_USERS_INFO_0*>puGroupBuf(50);
 	PSID Sid;
 	LPTSTR sid_str;
 	LSA_HANDLE lsahPolicyHandle = NULL;
@@ -199,78 +201,94 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
 		if (_NetUserEnum != NULL && _NetLocalGroupEnum != NULL)
 		{
-			// TODO: Set Parameter Values
-			usrRes = _NetUserEnum(
-				NULL,
-				1, // this attribute to change structure fields 
-				0,
-				(LPBYTE*)&pUserBuf,
-				MAX_PREFERRED_LENGTH,
-				/*out*/&entRead,
-				/*out*/&entries,
-				/*out resumehandle*/ NULL
-			);
 
-			
-			if (usrRes == NERR_Success)
+			do
 			{
-				printf("\tList of users in system :: \n");
-				for (int i = 0;i!=entries; i++) {
-					if (pUserBuf[i].usri1_name == NULL) break;
-					printf("User :: %S\n", pUserBuf[i].usri1_name);
+				// TODO: Set Parameter Values
+				usrRes = _NetUserEnum(
+					NULL,
+					1, // this attribute to change structure fields 
+					2,
+					(LPBYTE*)&pUserBuf,
+					MAX_PREFERRED_LENGTH,
+					/*out*/&entRead,
+					/*out*/&entries,
+					/*out resumehandle*/ NULL
+				);
 
 
-					usrRes = outGroup(pUserBuf[i].usri1_name, netHandle, puGroupBuf);
-					if (!usrRes) {
-						printf("None;\n");
-					}
-					else {
-						//printf("\n");
-						for (int j = 0; j < usrRes; j++) {
-							if (puGroupBuf[j].lgrui0_name != NULL) {
-								printf("%S; ", puGroupBuf[j].lgrui0_name);
-								Sid = getSid(puGroupBuf[j].lgrui0_name, advHandle, kernHandle);
-								_ConvertSidToStringSidA(Sid, &sid_str);
-								printf(" || group SID :: %s\n", sid_str);
-								ShowObjRights(lsahPolicyHandle, Sid, advHandle);
+				if ((usrRes == NERR_Success) || (usrRes == ERROR_MORE_DATA))
+				{
+					printf("\tList of users in system :: \n");
+					if ((pTmpUserBuf = pUserBuf) != NULL)
+					{
+						for (int i = 0; i != entries; i++)
+						{
+							printf("User :: %S\n", pTmpUserBuf->usri1_name);
+
+							usrRes = outGroup(pTmpUserBuf->usri1_name, netHandle, puGroupBuf);
+							if (!usrRes) {
+								printf("None;\n");
 							}
+							else {
+								//printf("\n");
+								for (int j = 0; j < usrRes; j++) {
+									if (puGroupBuf[j] != NULL) {
+										printf("%S; ", puGroupBuf[j]->lgrui0_name);
+										Sid = getSid(puGroupBuf[j]->lgrui0_name, advHandle, kernHandle);
+										_ConvertSidToStringSidA(Sid, &sid_str);
+										printf(" || group SID :: %s\n", sid_str);
+										ShowObjRights(lsahPolicyHandle, Sid, advHandle);
+									}
+								}
+
+							}
+
+							Sid = getSid(pTmpUserBuf->usri1_name, advHandle, kernHandle);
+							_ConvertSidToStringSidA(Sid, &sid_str);
+							printf("user SID :: %s\n", sid_str);
+							ShowObjRights(lsahPolicyHandle, Sid, advHandle);
+							printf("\n\n");
+							pTmpUserBuf++;
 						}
-
 					}
-
-					Sid = getSid(pUserBuf[i].usri1_name, advHandle,kernHandle);
-					_ConvertSidToStringSidA(Sid, &sid_str);
-					printf("user SID :: %s\n", sid_str);
-					ShowObjRights(lsahPolicyHandle,Sid,advHandle);
-					printf("\n\n");
 				}
-			}
+			} while (usrRes == ERROR_MORE_DATA);
+
 			entRead = 0;
 			entries = 0;
-			grRes = _NetLocalGroupEnum(
-				NULL,
-				0,
-				(LPBYTE*)&pGroupBuf,
-				MAX_PREFERRED_LENGTH,
-				/*out*/&entRead,
-				/*out*/&entries,
-				NULL
-			);
 
-			if (grRes == NERR_Success) {
-				printf("\tList of groups in system :: \n");
-				for (int i = 0; i != entries; i++) {
-					if (pGroupBuf[i].lgrpi0_name == NULL) break;
-					Sid = getSid(pGroupBuf[i].lgrpi0_name, advHandle, kernHandle);
-					_ConvertSidToStringSidA(Sid, &sid_str);
-					printf("group SID :: %s\t", sid_str);
-					wprintf(L"%ls\n", pGroupBuf[i].lgrpi0_name);
+			do
+			{
+				grRes = _NetLocalGroupEnum(
+					NULL,
+					0,
+					(LPBYTE*)&pGroupBuf,
+					MAX_PREFERRED_LENGTH,
+					/*out*/&entRead,
+					/*out*/&entries,
+					NULL
+				);
+
+				if ((grRes == NERR_Success) || (grRes == ERROR_MORE_DATA))
+				{
+					printf("\tList of groups in system :: \n");
+					if ((pTmpGroupBuf = pGroupBuf) != NULL)
+					{
+						for (int i = 0; i != entries; i++)
+						{
+							Sid = getSid(pTmpGroupBuf->lgrpi0_name, advHandle, kernHandle);
+							_ConvertSidToStringSidA(Sid, &sid_str);
+							printf("group SID :: %s\t", sid_str);
+							wprintf(L"%ls\n", pTmpGroupBuf->lgrpi0_name);
+							pTmpGroupBuf++;
+						}
+					}
 				}
-			}
+			} while (grRes == ERROR_MORE_DATA);
 
 		}
-	delete[] pUserBuf;
-	delete[] pGroupBuf;
+
 	_LsaClose(lsahPolicyHandle);
 }
 
@@ -803,9 +821,17 @@ int main(void)
 	setlocale(LC_ALL, "Russian");
 	SetConsoleCP(1251);
 	SetConsoleOutputCP(1251);
-	HMODULE netHandle = LoadLibrary(("Netapi32.dll"));
-	HMODULE advHandle = LoadLibrary(("Advapi32.dll"));
-	HMODULE kernHandle = LoadLibrary(("Kernel32.dll"));
+	HMODULE netHandle = LoadLibrary("Netapi32.dll");
+	HMODULE advHandle = LoadLibrary("Advapi32.dll");
+	HMODULE kernHandle = LoadLibrary("Kernel32.dll");
+	if (netHandle == NULL ||
+		advHandle == NULL ||
+		kernHandle == NULL)
+	{
+		printf("Some problems while loading dll libraries: 0x%x", GetLastError());
+		return -1;
+	}
+
 	int mode = 0;
 AGN:
 	printf("Select program mode ::\n");
@@ -839,9 +865,22 @@ AGN:
 	scanf("%d", &mode);
 	printf("\n");
 	if (mode == 1) {
-		FreeLibrary(netHandle);
-		FreeLibrary(advHandle);
-		FreeLibrary(kernHandle);
+		if (netHandle != NULL)
+		{
+			FreeLibrary(netHandle);
+		}
+
+		if (advHandle != NULL)
+		{
+
+			FreeLibrary(advHandle);
+		}
+
+		if (kernHandle != NULL)
+		{
+			FreeLibrary(kernHandle);
+		}
+
 		system("pause");
 		return 0;
 	}
