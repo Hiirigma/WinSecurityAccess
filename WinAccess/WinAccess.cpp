@@ -719,14 +719,13 @@ void AddRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 	}
 
 	printf("Choose privilege to add :: \n");
+	printf("-1 - Exit \n");
 	for (int i = 0; i != 41; i++) printf("%d - %ls\n", i + 1, privil[i]);
 
 	do {
 		scanf("%d", &mode);
-		mode--;
-		if (mode > 41)continue;
-		if (mode == -1)break;
-		
+		getchar();
+		if (mode < 0 || mode > 41) break;
 		UserRights.Buffer = privil[mode];
 		UserRights.Length = wcslen(privil[mode]) * sizeof(wchar_t);
 		UserRights.MaximumLength = (wcslen(privil[mode]) + 1) * sizeof(wchar_t);
@@ -735,10 +734,9 @@ void AddRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 			&UserRights,
 			CountOfRights);
 		if (nStatus == NERR_Success)
-			printf("Successfully added shutdown right\n");
+			printf("Successfully added %S\n right", privil[mode]);
 		else {
 			printf("A system error has occurred :: %d\n", nStatus);
-			return;
 		}
 
 	} while (mode);
@@ -804,9 +802,9 @@ void DelRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 			printf("Successfully deleted shutdown right\n");
 			memset(buffer_privil, 0, sizeof(buffer_privil));
 		}
-		else {
+		else 
+		{
 			printf("A system error has occurred: %d\n", nStatus);
-			return;
 		}
 
 	} while (mode > 0);
@@ -833,20 +831,22 @@ int main(void)
 	}
 
 	int mode = 0;
-AGN:
-	printf("Select program mode ::\n");
-	printf("0 :: Show all info\n");
-	printf("1 :: Add user\n");
-	printf("2 :: Del user\n");
-	printf("3 :: Add group\n");
-	printf("4 :: Del group\n");
-	printf("5 :: Add user to group\n"); 
-	printf("6 :: Del user from group\n");
-	printf("7 :: Add privilege to user\n");
-	printf("8 :: Delete privilege from user\n");
+	while (1)
+	{
+		printf("Select program mode ::\n");
+		printf("-1 :: Exit\n");
+		printf("0 :: Show all info\n");
+		printf("1 :: Add user\n");
+		printf("2 :: Del user\n");
+		printf("3 :: Add group\n");
+		printf("4 :: Del group\n");
+		printf("5 :: Add user to group\n");
+		printf("6 :: Del user from group\n");
+		printf("7 :: Add privilege to user\n");
+		printf("8 :: Delete privilege from user\n");
 
-	scanf("%d",&mode);
-	switch (mode) {
+		scanf("%d", &mode);
+		switch (mode) {
 		case 0: outUsers(netHandle, advHandle, kernHandle); break;
 		case 1: addUser(netHandle, advHandle, kernHandle); break;
 		case 2: delUser(netHandle, advHandle, kernHandle); break;
@@ -854,39 +854,28 @@ AGN:
 		case 4: delGroup(netHandle, advHandle, kernHandle); break;
 		case 5: AddMembersInGroup(advHandle, kernHandle, netHandle); break;
 		case 6: DelMembersInGroup(advHandle, kernHandle, netHandle); break;
-		//case 7: AddLogonRights(advHandle, kernHandle, netHandle); break;
-		//case 8: DelLogonRights(advHandle, kernHandle, netHandle); break;
 		case 7: AddRights(advHandle, kernHandle, netHandle); break;
 		case 8: DelRights(advHandle, kernHandle, netHandle); break;
+		case -1:
+		default:
+			if (netHandle != NULL)
+			{
+				FreeLibrary(netHandle);
+			}
 
+			if (advHandle != NULL)
+			{
 
-	}
-	printf("Would you like to exit :: 0 or 1\n");
-	scanf("%d", &mode);
-	printf("\n");
-	if (mode == 1) {
-		if (netHandle != NULL)
-		{
-			FreeLibrary(netHandle);
+				FreeLibrary(advHandle);
+			}
+
+			if (kernHandle != NULL)
+			{
+				FreeLibrary(kernHandle);
+			}
+			system("pause");
+			return 0;
 		}
-
-		if (advHandle != NULL)
-		{
-
-			FreeLibrary(advHandle);
-		}
-
-		if (kernHandle != NULL)
-		{
-			FreeLibrary(kernHandle);
-		}
-
-		system("pause");
-		return 0;
 	}
-	else {
-		goto AGN;
-	}
-
 	return 0;
 }
