@@ -1,3 +1,5 @@
+#include "LibHeader.h" 
+
 // MBKS laboratory work - 6
 
 //		The criteria ::
@@ -16,18 +18,14 @@
 
 // V - Owners
 // V - file info
-// - - dir info
-// - - rigths for all created files and dirs
-
-//		Need change ::
+// V - dir info
+// V - add attributes for user to ACL for file and directory
 // V - Users add
 // V - Users delete
 // V - Groups add
 // V - Groups delete
 // V - Privilleges add
 // V - Privilleges delete
-
-#include "LibHeader.h" 
 
 int ShowObjRights(LSA_HANDLE lsahPolicyHandle, PSID AccountSid, HMODULE advHandle)
 {
@@ -236,7 +234,6 @@ void outUsers(HMODULE netHandle, HMODULE advHandle, HMODULE kernHandle) {
 
 	if (_NetUserEnum != NULL && _NetLocalGroupEnum != NULL)
 	{
-
 		do
 		{
 			// TODO: Set Parameter Values
@@ -1078,23 +1075,7 @@ void printFileAttributes(wchar_t filepath[])
 // Get file or folder information
 void GetObjectInfo(HMODULE advHandle)
 {
-	DWORD dwRtnCode = 0;
-	PSID pSidOwner = NULL;
-	BOOL bRtnBool = TRUE;
-	LPTSTR AcctName = NULL;
-	LPTSTR DomainName = NULL;
-	DWORD dwAcctName = 1, dwDomainName = 1;
-	SID_NAME_USE eUse = SidTypeUnknown;
-	HANDLE hFile;
-	PSECURITY_DESCRIPTOR pSD = NULL;
 	wchar_t wcPath[MAX_PATH] = { 0 };
-
-	PROC_GetSecurityInfoA _GetSecurityInfo = (PROC_GetSecurityInfoA)GetProcAddress(advHandle, "GetSecurityInfo");
-	if (_GetSecurityInfo == NULL)
-	{
-		printf("Can't get fuction address with error:: %d\n", GetLastError());
-		return;
-	}
 
 	printf("Input full file path:: ");
 	fgetws(wcPath, MAX_PATH, stdin);
@@ -1105,6 +1086,192 @@ void GetObjectInfo(HMODULE advHandle)
 	printFileProperties(wcPath);
 	return;
 }
+
+DWORD AddAceToObjectsSecurityDescriptor(
+	HMODULE advHandle,
+	LPWSTR pszObjName,          // name of object
+	SE_OBJECT_TYPE ObjectType,  // type of object
+	LPWSTR pszTrustee,          // trustee for new ACE
+	TRUSTEE_FORM TrusteeForm,   // format of trustee structure
+	DWORD dwAccessRights,       // access mask for new ACE
+	ACCESS_MODE AccessMode,     // type of ACE
+	DWORD dwInheritance         // inheritance flags for new ACE
+)
+{
+	DWORD dwRes = 0;
+	PACL pOldDACL = NULL, pNewDACL = NULL;
+	PSECURITY_DESCRIPTOR pSD = NULL;
+	EXPLICIT_ACCESS_W ea;
+
+	if (NULL == pszObjName)
+		return ERROR_INVALID_PARAMETER;
+
+	PROC_GetNamedSecurityInfoW _GetNamedSecurityInfoW = (PROC_GetNamedSecurityInfoW)GetProcAddress(advHandle, "GetNamedSecurityInfoW");
+	PROC_SetEntriesInAclW _SetEntriesInAclW = (PROC_SetEntriesInAclW)GetProcAddress(advHandle, "SetEntriesInAclW");
+	PROC_SetNamedSecurityInfoW _SetNamedSecurityInfoW = (PROC_SetNamedSecurityInfoW)GetProcAddress(advHandle, "SetNamedSecurityInfoW");
+	
+	if (_GetNamedSecurityInfoW == NULL ||
+		_SetEntriesInAclW == NULL ||
+		_SetNamedSecurityInfoW == NULL)
+	{
+		printf("Can't get fuction address with error:: %d\n", GetLastError());
+		return -1;
+	}
+
+	// Get a pointer to the existing DACL.
+
+	dwRes = _GetNamedSecurityInfoW(pszObjName, ObjectType,
+		DACL_SECURITY_INFORMATION,
+		NULL, NULL, &pOldDACL, NULL, &pSD);
+	if (ERROR_SUCCESS != dwRes) {
+		printf("GetNamedSecurityInfo Error %u\n", dwRes);
+		goto Cleanup;
+	}
+
+	// Initialize an EXPLICIT_ACCESS structure for the new ACE. 
+
+	ZeroMemory(&ea, sizeof(EXPLICIT_ACCESS_W));
+	ea.grfAccessPermissions = dwAccessRights;
+	ea.grfAccessMode = AccessMode;
+	ea.grfInheritance = dwInheritance;
+	ea.Trustee.TrusteeForm = TrusteeForm;
+	ea.Trustee.ptstrName = pszTrustee;
+
+	// Create a new ACL that merges the new ACE
+	// into the existing DACL.
+
+	dwRes = _SetEntriesInAclW(1, &ea, pOldDACL, &pNewDACL);
+	if (ERROR_SUCCESS != dwRes) {
+		printf("SetEntriesInAcl Error %u\n", dwRes);
+		goto Cleanup;
+	}
+
+	// Attach the new ACL as the object's DACL.
+	dwRes = _SetNamedSecurityInfoW(pszObjName, ObjectType,
+		DACL_SECURITY_INFORMATION,
+		NULL, NULL, pNewDACL, NULL);
+	if (ERROR_SUCCESS != dwRes) {
+		printf("SetNamedSecurityInfo Error %u\n", dwRes);
+		goto Cleanup;
+	}
+
+Cleanup:
+
+	if (pSD != NULL)
+		LocalFree((HLOCAL)pSD);
+	if (pNewDACL != NULL)
+		LocalFree((HLOCAL)pNewDACL);
+
+	return dwRes;
+}
+
+DWORD GetAccessMask()
+{
+	int dMode = 0;
+
+	printf("Enter numbers of the access to edit (allow multimode):\n");
+	printf("1 :: To read, write, and execute the object (generic all)\n");
+	printf("2 :: To modify the control (security) information\n");
+	printf("3 :: To modify the owner SID of the object\n");
+	printf("4 :: To delete file\n");
+	printf("5 :: To read the information maintained by the object\n");
+	printf("6 :: To write the information maintained by the object\n");
+	printf("7 :: To execute or alternatively look into the object\n");
+	printf("Input :: ");
+	scanf("%d", &dMode);
+	getchar();
+
+	DWORD mask = 0;
+	while (dMode > 0)
+	{
+		char cLocalMode = dMode % 10;
+		dMode /= 10;
+		switch (cLocalMode)
+			{
+			case 1: mask |= GENERIC_ALL; break;
+			case 2: mask |= WRITE_DAC; break;
+			case 3: mask |= WRITE_OWNER; break;
+			case 4: mask |= DELETE; break;
+			case 5: mask |= FILE_GENERIC_READ; break;
+			case 6: mask |= FILE_GENERIC_WRITE; break;
+			case 7: mask |= FILE_GENERIC_EXECUTE; break;
+			default: break;
+		}
+	}
+	return mask;
+}
+
+int GetAccessMode()
+{
+	ACCESS_MODE accessMode = (ACCESS_MODE)0;
+	int dMode = 0;
+
+	printf("Enter access mode\n");
+	printf("1 :: Setting access\n");
+	printf("2 :: Denying access\n");
+	printf("3 :: Remove access\n");
+	printf("Input :: ");
+	scanf("%d", &dMode);
+	getchar();
+
+	if (dMode == 1)
+	{
+		return GRANT_ACCESS;
+	}
+	if (dMode == 2)
+	{
+		return DENY_ACCESS;
+	}
+	if (dMode == 3)
+	{
+		return REVOKE_ACCESS;
+	}
+	return -1;
+}
+
+
+void AddPermissionsToObject(HMODULE advHandle)
+{
+	wchar_t wcPath[MAX_PATH] = { 0 };
+	wchar_t wcName[MAX_PATH] = { 0 };
+	int dMode = -1;
+
+	printf("Input full file path:: ");
+	fgetws(wcPath, MAX_PATH, stdin);
+	wcPath[wcscspn(wcPath, L"\n")] = 0;
+
+	printf("Input group or user name :: ");
+	fgetws(wcName, MAX_PATH, stdin);
+	wcName[wcscspn(wcName, L"\n")] = 0;
+
+	int dAccessMode = GetAccessMode();
+
+	if (dAccessMode == -1)
+	{
+		printf("Can't retrieve access mode\n");
+		return;
+	}
+
+	DWORD dwAccessMask = GetAccessMask();
+
+	dwAccessMask = AddAceToObjectsSecurityDescriptor(
+		advHandle,
+		wcPath, SE_FILE_OBJECT,
+		wcName, TRUSTEE_IS_NAME,
+		dwAccessMask, (ACCESS_MODE)dAccessMode,
+		NO_INHERITANCE
+	);
+
+	if (dwAccessMask == 0)
+	{
+		printf("Permissions is successfully added\n");
+	}
+	else
+	{
+		printf("Problem with added\n");
+	}
+}
+
 
 int main(void)
 {
@@ -1122,55 +1289,58 @@ int main(void)
 		return -1;
 	}
 
-	int mode = 0;
-	while (1)
+	int dMode = 0;
+
+	do
 	{
 		printf("Select program mode ::\n");
-		printf("-1 :: Exit\n");
-		printf("0 :: Show all info\n");
-		printf("1 :: Add user\n");
-		printf("2 :: Del user\n");
-		printf("3 :: Add group\n");
-		printf("4 :: Del group\n");
-		printf("5 :: Add user to group\n");
-		printf("6 :: Del user from group\n");
-		printf("7 :: Add privilege to user\n");
-		printf("8 :: Delete privilege from user\n");
-		printf("9 :: Get file ifo\n");
+		printf("-1	:: Exit\n");
+		printf("0	:: Show all info\n");
+		printf("1	:: Add user\n");
+		printf("2	:: Del user\n");
+		printf("3	:: Add group\n");
+		printf("4	:: Del group\n");
+		printf("5	:: Add user to group\n");
+		printf("6	:: Del user from group\n");
+		printf("7	:: Add privilege to user\n");
+		printf("8	:: Delete privilege from user\n");
+		printf("9	:: Get object info\n");
+		printf("10	:: Add permissions to object\n");
 
-		scanf("%d", &mode);
+		scanf("%d", &dMode);
 		getchar();
-		switch (mode) {
-		case 0: outUsers(netHandle, advHandle, kernHandle); break;
-		case 1: addUser(netHandle, advHandle, kernHandle); break;
-		case 2: delUser(netHandle, advHandle, kernHandle); break;
-		case 3: addGroup(netHandle, advHandle, kernHandle); break;
-		case 4: delGroup(netHandle, advHandle, kernHandle); break;
-		case 5: AddMembersInGroup(advHandle, kernHandle, netHandle); break;
-		case 6: DelMembersInGroup(advHandle, kernHandle, netHandle); break;
-		case 7: AddRights(advHandle, kernHandle, netHandle); break;
-		case 8: DelRights(advHandle, kernHandle, netHandle); break;
-		case 9: GetObjectInfo(advHandle); break;
-		case -1:
-		default:
-			if (netHandle != NULL)
-			{
-				FreeLibrary(netHandle);
-			}
-
-			if (advHandle != NULL)
-			{
-
-				FreeLibrary(advHandle);
-			}
-
-			if (kernHandle != NULL)
-			{
-				FreeLibrary(kernHandle);
-			}
-			system("pause");
-			return 0;
+		switch (dMode) 
+		{
+			case 0: outUsers(netHandle, advHandle, kernHandle); break;
+			case 1: addUser(netHandle, advHandle, kernHandle); break;
+			case 2: delUser(netHandle, advHandle, kernHandle); break;
+			case 3: addGroup(netHandle, advHandle, kernHandle); break;
+			case 4: delGroup(netHandle, advHandle, kernHandle); break;
+			case 5: AddMembersInGroup(advHandle, kernHandle, netHandle); break;
+			case 6: DelMembersInGroup(advHandle, kernHandle, netHandle); break;
+			case 7: AddRights(advHandle, kernHandle, netHandle); break;
+			case 8: DelRights(advHandle, kernHandle, netHandle); break;
+			case 9: GetObjectInfo(advHandle); break;
+			case 10: AddPermissionsToObject(advHandle); break;
 		}
+	}while (dMode != -1);
+
+	if (netHandle != NULL)
+	{
+		FreeLibrary(netHandle);
 	}
+
+	if (advHandle != NULL)
+	{
+
+		FreeLibrary(advHandle);
+	}
+
+	if (kernHandle != NULL)
+	{
+		FreeLibrary(kernHandle);
+	}
+	system("pause");
+
 	return 0;
 }

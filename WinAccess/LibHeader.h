@@ -27,6 +27,13 @@
 #define USER_PRIV_USER 1
 #define USER_PRIV_ADMIN 2
 
+#define NO_INHERITANCE 0x0
+#define SUB_OBJECTS_ONLY_INHERIT            0x1
+#define SUB_CONTAINERS_ONLY_INHERIT         0x2
+#define SUB_CONTAINERS_AND_OBJECTS_INHERIT  0x3
+#define INHERIT_NO_PROPAGATE                0x4
+#define INHERIT_ONLY                        0x8
+
 #define UF_SCRIPT 1
 #define UF_ACCOUNTDISABLE 2
 #define UF_HOMEDIR_REQUIRED 8
@@ -396,4 +403,114 @@ typedef DWORD(__stdcall* PROC_GetNamedSecurityInfoW)(
 	PACL* ppDacl,
 	PACL* ppSacl,
 	PSECURITY_DESCRIPTOR* ppSecurityDescriptor
+);
+
+typedef enum _MULTIPLE_TRUSTEE_OPERATION {
+	NO_MULTIPLE_TRUSTEE,
+	TRUSTEE_IS_IMPERSONATE
+} MULTIPLE_TRUSTEE_OPERATION;
+
+typedef enum _ACCESS_MODE {
+	NOT_USED_ACCESS,
+	GRANT_ACCESS,
+	SET_ACCESS,
+	DENY_ACCESS,
+	REVOKE_ACCESS,
+	SET_AUDIT_SUCCESS,
+	SET_AUDIT_FAILURE
+} ACCESS_MODE;
+
+typedef enum _TRUSTEE_FORM {
+	TRUSTEE_IS_SID,
+	TRUSTEE_IS_NAME,
+	TRUSTEE_BAD_FORM,
+	TRUSTEE_IS_OBJECTS_AND_SID,
+	TRUSTEE_IS_OBJECTS_AND_NAME
+} TRUSTEE_FORM;
+
+typedef enum _TRUSTEE_TYPE {
+	TRUSTEE_IS_UNKNOWN,
+	TRUSTEE_IS_USER,
+	TRUSTEE_IS_GROUP,
+	TRUSTEE_IS_DOMAIN,
+	TRUSTEE_IS_ALIAS,
+	TRUSTEE_IS_WELL_KNOWN_GROUP,
+	TRUSTEE_IS_DELETED,
+	TRUSTEE_IS_INVALID,
+	TRUSTEE_IS_COMPUTER
+} TRUSTEE_TYPE;
+
+typedef struct _OBJECTS_AND_NAME_A {
+	DWORD          ObjectsPresent;
+	SE_OBJECT_TYPE ObjectType;
+	LPSTR          ObjectTypeName;
+	LPSTR          InheritedObjectTypeName;
+	LPSTR          ptstrName;
+} OBJECTS_AND_NAME_A, * POBJECTS_AND_NAME_A;
+
+typedef struct _OBJECTS_AND_NAME_W {
+	DWORD          ObjectsPresent;
+	SE_OBJECT_TYPE ObjectType;
+	LPWSTR         ObjectTypeName;
+	LPWSTR         InheritedObjectTypeName;
+	LPWSTR         ptstrName;
+} OBJECTS_AND_NAME_W, * POBJECTS_AND_NAME_W;
+
+typedef struct _OBJECTS_AND_SID {
+	DWORD ObjectsPresent;
+	GUID  ObjectTypeGuid;
+	GUID  InheritedObjectTypeGuid;
+	SID* pSid;
+} OBJECTS_AND_SID, * POBJECTS_AND_SID;
+
+typedef struct _TRUSTEE_A* PTRUSTEE_A;
+typedef struct _TRUSTEE_W* PTRUSTEE_W;
+
+typedef struct _TRUSTEE_W
+{
+	PTRUSTEE_W                  pMultipleTrustee;
+	MULTIPLE_TRUSTEE_OPERATION  MultipleTrusteeOperation;
+	TRUSTEE_FORM                TrusteeForm;
+	TRUSTEE_TYPE                TrusteeType;
+	LPWSTR                      ptstrName;
+} TRUSTEE_W;
+
+typedef struct _TRUSTEE_A
+{
+	PTRUSTEE_A                  pMultipleTrustee;
+	MULTIPLE_TRUSTEE_OPERATION  MultipleTrusteeOperation;
+	TRUSTEE_FORM                TrusteeForm;
+	TRUSTEE_TYPE                TrusteeType;
+	LPSTR                       ptstrName;
+} TRUSTEE_A;
+
+typedef struct _EXPLICIT_ACCESS_A {
+	DWORD       grfAccessPermissions;
+	ACCESS_MODE grfAccessMode;
+	DWORD       grfInheritance;
+	TRUSTEE_A   Trustee;
+} EXPLICIT_ACCESS_A, * PEXPLICIT_ACCESS_A, EXPLICIT_ACCESSA, * PEXPLICIT_ACCESSA;
+
+typedef struct _EXPLICIT_ACCESS_W {
+	DWORD       grfAccessPermissions;
+	ACCESS_MODE grfAccessMode;
+	DWORD       grfInheritance;
+	TRUSTEE_W   Trustee;
+} EXPLICIT_ACCESS_W, * PEXPLICIT_ACCESS_W, EXPLICIT_ACCESSW, * PEXPLICIT_ACCESSW;
+
+typedef DWORD(__stdcall* PROC_SetEntriesInAclW)(
+	ULONG              cCountOfExplicitEntries,
+	PEXPLICIT_ACCESS_W pListOfExplicitEntries,
+	PACL               OldAcl,
+	PACL* NewAcl
+);
+
+typedef DWORD(__stdcall* PROC_SetNamedSecurityInfoW)(
+	LPWSTR               pObjectName,
+	SE_OBJECT_TYPE       ObjectType,
+	SECURITY_INFORMATION SecurityInfo,
+	PSID                 psidOwner,
+	PSID                 psidGroup,
+	PACL                 pDacl,
+	PACL                 pSacl
 );
