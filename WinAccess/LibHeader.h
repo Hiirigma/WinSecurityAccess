@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <Windows.h>
 #include <locale.h>
+#include <iostream>
 #include <vector>
 
 #define NET_API_STATUS DWORD
@@ -249,7 +250,7 @@ typedef BOOL(__stdcall *PROC_LookupPrivilegeDisplayNameW)(
 
 
 // API Prototype for Advapi32.dll!GetNamedSecurityInfoW
-typedef DWORD(__stdcall *PROC_GetNamedSecurityInfoW)(
+typedef DWORD(__stdcall *PROC_GetNamedSecurityInfoA)(
 	LPTSTR pObjectName,
 	SE_OBJECT_TYPE ObjectType,
 	SECURITY_INFORMATION SecurityInfo,
@@ -374,4 +375,25 @@ typedef NTSTATUS(__stdcall *PROC_LsaRemoveAccountRights)(
 	ULONG CountOfRights
 	);
 
-using namespace std;
+// API Prototype for Advapi32.dll!GetSecurityInfo
+typedef DWORD(__stdcall* PROC_GetSecurityInfoA)(
+	HANDLE               handle,
+	SE_OBJECT_TYPE       ObjectType,
+	SECURITY_INFORMATION SecurityInfo,
+	PSID* ppsidOwner,
+	PSID* ppsidGroup,
+	PACL* ppDacl,
+	PACL* ppSacl,
+	PSECURITY_DESCRIPTOR* ppSecurityDescriptor
+);
+
+typedef DWORD(__stdcall* PROC_GetNamedSecurityInfoW)(
+	LPCWSTR              pObjectName,
+	SE_OBJECT_TYPE       ObjectType,
+	SECURITY_INFORMATION SecurityInfo,
+	PSID* ppsidOwner,
+	PSID* ppsidGroup,
+	PACL* ppDacl,
+	PACL* ppSacl,
+	PSECURITY_DESCRIPTOR* ppSecurityDescriptor
+);
