@@ -1089,6 +1089,7 @@ void GetObjectInfo(HMODULE advHandle)
 
 DWORD AddAceToObjectsSecurityDescriptor(
 	HMODULE advHandle,
+	HMODULE kernHandle,
 	LPWSTR pszObjName,          // name of object
 	SE_OBJECT_TYPE ObjectType,  // type of object
 	LPWSTR pszTrustee,          // trustee for new ACE
@@ -1104,7 +1105,9 @@ DWORD AddAceToObjectsSecurityDescriptor(
 	EXPLICIT_ACCESS_W ea;
 
 	if (NULL == pszObjName)
+	{
 		return ERROR_INVALID_PARAMETER;
+	}
 
 	PROC_GetNamedSecurityInfoW _GetNamedSecurityInfoW = (PROC_GetNamedSecurityInfoW)GetProcAddress(advHandle, "GetNamedSecurityInfoW");
 	PROC_SetEntriesInAclW _SetEntriesInAclW = (PROC_SetEntriesInAclW)GetProcAddress(advHandle, "SetEntriesInAclW");
@@ -1123,9 +1126,118 @@ DWORD AddAceToObjectsSecurityDescriptor(
 	dwRes = _GetNamedSecurityInfoW(pszObjName, ObjectType,
 		DACL_SECURITY_INFORMATION,
 		NULL, NULL, &pOldDACL, NULL, &pSD);
+
 	if (ERROR_SUCCESS != dwRes) {
 		printf("GetNamedSecurityInfo Error %u\n", dwRes);
 		goto Cleanup;
+	}
+
+	SID* sid;
+	ACCESS_ALLOWED_ACE* ace;
+
+	bool bFind = false;
+	for (int i = 0; i < (*pOldDACL).AceCount; i++) 
+	{
+		int c = 1;
+		BOOL b = GetAce(pOldDACL, i, (PVOID*)&ace);
+
+		if (((ACCESS_ALLOWED_ACE*)ace)->Header.AceType == ACCESS_ALLOWED_ACE_TYPE) {
+			sid = (SID*)&((ACCESS_ALLOWED_ACE*)ace)->SidStart;
+			PSID pSid = getSid(pszTrustee, advHandle, kernHandle);
+
+			if (pSid == NULL)
+			{
+				printf("getSid Error psid is NULL\n");
+				goto Cleanup;
+			}
+
+			if (pSid != sid)
+			{
+				continue;
+			}
+			else
+			{
+				bFind = true;
+				if (AccessMode == REVOKE_ACCESS)
+				{
+					if (((ACCESS_ALLOWED_ACE*)ace)->Mask & dwAccessRights)
+					{
+						dwAccessRights ^= ((ACCESS_ALLOWED_ACE*)ace)->Mask;
+					}
+					else
+					{
+						dwRes = -1;
+						goto Cleanup;
+					}
+				}
+				else
+				{
+					dwAccessRights |= ((ACCESS_ALLOWED_ACE*)ace)->Mask;
+				}
+
+				AccessMode = SET_ACCESS;
+				break;
+			}
+		}
+		else if (((ACCESS_DENIED_ACE*)ace)->Header.AceType == ACCESS_DENIED_ACE_TYPE) {
+			sid = (SID*)&((ACCESS_DENIED_ACE*)ace)->SidStart;
+			PSID pSid = getSid(pszTrustee, advHandle, kernHandle);
+
+			if (pSid == NULL)
+			{
+				printf("getSid Error psid is NULL\n");
+				dwRes = -1;
+				goto Cleanup;
+			}
+
+			if (pSid != sid)
+			{
+				continue;
+			}
+			else
+			{
+				bFind = true;
+
+				if (AccessMode == REVOKE_ACCESS)
+				{
+					if (((ACCESS_DENIED_ACE*)ace)->Mask & dwAccessRights)
+					{
+						dwAccessRights ^= ((ACCESS_DENIED_ACE*)ace)->Mask;
+					}
+					else
+					{
+						dwRes = -1;
+						goto Cleanup;
+					}
+				}
+				else
+				{
+					dwAccessRights |= ((ACCESS_DENIED_ACE*)ace)->Mask;
+				}
+
+				AccessMode = SET_ACCESS;
+				break;
+			}
+		}
+		else
+		{
+			return -1;
+		}
+	}
+
+	if (bFind == false && AccessMode == REVOKE_ACCESS)
+	{
+		printf("Can't revoke permission for unexist user\n");
+		dwRes = -1;
+		goto Cleanup;
+	}
+
+	long unsigned int FileAttributes;
+	FileAttributes = GetFileAttributesW(pszObjName);
+
+	if (FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		dwInheritance = SUB_CONTAINERS_AND_OBJECTS_INHERIT;
 	}
 
 	// Initialize an EXPLICIT_ACCESS structure for the new ACE. 
@@ -1230,7 +1342,7 @@ int GetAccessMode()
 }
 
 
-void AddPermissionsToObject(HMODULE advHandle)
+void AddPermissionsToObject(HMODULE advHandle, HMODULE kernHandle)
 {
 	wchar_t wcPath[MAX_PATH] = { 0 };
 	wchar_t wcName[MAX_PATH] = { 0 };
@@ -1256,6 +1368,7 @@ void AddPermissionsToObject(HMODULE advHandle)
 
 	dwAccessMask = AddAceToObjectsSecurityDescriptor(
 		advHandle,
+		kernHandle,
 		wcPath, SE_FILE_OBJECT,
 		wcName, TRUSTEE_IS_NAME,
 		dwAccessMask, (ACCESS_MODE)dAccessMode,
@@ -1321,7 +1434,7 @@ int main(void)
 			case 7: AddRights(advHandle, kernHandle, netHandle); break;
 			case 8: DelRights(advHandle, kernHandle, netHandle); break;
 			case 9: GetObjectInfo(advHandle); break;
-			case 10: AddPermissionsToObject(advHandle); break;
+			case 10: AddPermissionsToObject(advHandle, kernHandle); break;
 		}
 	}while (dMode != -1);
 
