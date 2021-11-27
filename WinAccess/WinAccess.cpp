@@ -808,6 +808,7 @@ void AddRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 		scanf("%d", &mode);
 		getchar();
 		if (mode < 0 || mode > 41) break;
+		mode -= 1;
 		UserRights.Buffer = privil[mode];
 		UserRights.Length = wcslen(privil[mode]) * sizeof(wchar_t);
 		UserRights.MaximumLength = (wcslen(privil[mode]) + 1) * sizeof(wchar_t);
@@ -816,7 +817,7 @@ void AddRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 			&UserRights,
 			CountOfRights);
 		if (nStatus == NERR_Success)
-			printf("Successfully added %S\n right", privil[mode]);
+			printf("Successfully added %ls\n", privil[mode]);
 		else {
 			printf("A system error has occurred :: %d\n", nStatus);
 		}
@@ -874,21 +875,23 @@ void DelRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 
 
 	printf("Choose privilege to add :: \n");
+	printf("-1 :: Exit\n");
 
 	do{
 		ret_mode = getObjRights(lsahPolicyHandle, AccountSid, advHandle, buffer_privil);
 		scanf("%d", &mode);
 		if (mode <= 0 || mode > ret_mode) break;
-		UserRights.Buffer = buffer_privil[mode-1];
-		UserRights.Length = wcslen(buffer_privil[mode-1]) * sizeof(wchar_t);
-		UserRights.MaximumLength = (wcslen(buffer_privil[mode-1]) + 1) * sizeof(wchar_t);
+		mode -= 1;
+		UserRights.Buffer = buffer_privil[mode];
+		UserRights.Length = wcslen(buffer_privil[mode]) * sizeof(wchar_t);
+		UserRights.MaximumLength = (wcslen(buffer_privil[mode]) + 1) * sizeof(wchar_t);
 		nStatus = _LsaRemoveAccountRights(lsahPolicyHandle,
 			AccountSid,
 			FALSE,
 			&UserRights,
 			CountOfRights);
 		if (nStatus == NERR_Success) {
-			printf("Successfully deleted shutdown right\n");
+			printf("Successfully deleted %ls\n", buffer_privil[mode]);
 			memset(buffer_privil, 0, sizeof(buffer_privil));
 		}
 		else 
@@ -896,7 +899,7 @@ void DelRights(HMODULE advHandle, HMODULE kernHandle, HMODULE netHandle)
 			printf("A system error has occurred: %d\n", nStatus);
 		}
 
-	} while (mode > 0);
+	} while (mode != -1);
 
 	_LsaClose(lsahPolicyHandle);
 }
@@ -927,6 +930,29 @@ void printFileProperties(wchar_t wcPath[])
 		dt.tm_hour, dt.tm_min, dt.tm_sec);
 	printf("\n");
 
+}
+
+void printFileAttributes(wchar_t filepath[])
+{
+	long unsigned int FileAttributes;
+	FileAttributes = GetFileAttributesW(filepath);
+	printf("\nFile type:");
+	if (FileAttributes & FILE_ATTRIBUTE_ARCHIVE)
+	{
+		printf("Archive\n");
+	}
+	if (FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		printf("Directory\n");
+	}
+	if (FileAttributes & FILE_ATTRIBUTE_READONLY)
+	{
+		printf("Read-Only\n");
+	}
+	if (FileAttributes & FILE_ATTRIBUTE_HIDDEN)
+	{
+		printf("Hidden\n");
+	}
 }
 
 void printGroupProperties(HMODULE advHandle, wchar_t wcPath[])
@@ -962,14 +988,23 @@ void printGroupProperties(HMODULE advHandle, wchar_t wcPath[])
 		, NULL
 		, &psd);
 
+
+	if (pdacl == NULL)
+	{
+		printf("Can't get object dacl with error: %x\n", GetLastError());
+		return;
+	}
+
+	printFileAttributes(wcPath);
+
 	LookupAccountSidW(NULL, sidowner, NULL, (LPDWORD)&dwNameLen, NULL, (LPDWORD)&dwDomainNameLen, &peUse);
 
 	wsName.resize(dwNameLen);
 	wsDomain.resize(dwDomainNameLen);
 
 	LookupAccountSidW(NULL, sidowner, wsName.data(), (LPDWORD)&dwNameLen, wsDomain.data(), (LPDWORD)&dwDomainNameLen, &peUse);
-	std::wcout << "\n\Owner: " << wsDomain << "/" << wsName;
-	std::wcout << "\n::ACCESS CONTROL LIST::";
+	std::wcout << "Owner: " << wsDomain << "/" << wsName << std::endl;
+	std::wcout << "::ACCESS CONTROL LIST::";
 	SID* sid;
 
 	for (int i = 0; i < (*pdacl).AceCount; i++) {
@@ -1049,29 +1084,6 @@ void printGroupProperties(HMODULE advHandle, wchar_t wcPath[])
 	}
 }
 
-void printFileAttributes(wchar_t filepath[])
-{
-	long unsigned int FileAttributes;
-	FileAttributes = GetFileAttributesW(filepath);
-	printf("\nFile type:");
-	if (FileAttributes & FILE_ATTRIBUTE_ARCHIVE)
-	{
-		printf("Archive ");
-	}
-	if (FileAttributes & FILE_ATTRIBUTE_DIRECTORY)
-	{
-		printf("Directory ");
-	}
-	if (FileAttributes & FILE_ATTRIBUTE_READONLY)
-	{
-		printf("Read-Only ");
-	}
-	if (FileAttributes & FILE_ATTRIBUTE_HIDDEN)
-	{
-		printf("Hidden");
-	}
-}
-
 // Get file or folder information
 void GetObjectInfo(HMODULE advHandle)
 {
@@ -1081,7 +1093,6 @@ void GetObjectInfo(HMODULE advHandle)
 	fgetws(wcPath, MAX_PATH, stdin);
 	wcPath[wcscspn(wcPath, L"\n")] = 0;
 
-	printFileAttributes(wcPath);
 	printGroupProperties(advHandle, wcPath);
 	printFileProperties(wcPath);
 	return;
@@ -1415,8 +1426,8 @@ int main(void)
 		printf("4	:: Del group\n");
 		printf("5	:: Add user to group\n");
 		printf("6	:: Del user from group\n");
-		printf("7	:: Add privilege to user\n");
-		printf("8	:: Delete privilege from user\n");
+		printf("7	:: Add privilege to user or group\n");
+		printf("8	:: Delete privilege from user or group\n");
 		printf("9	:: Get object info\n");
 		printf("10	:: Add permissions to object\n");
 
